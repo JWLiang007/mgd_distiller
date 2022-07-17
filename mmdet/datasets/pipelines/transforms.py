@@ -475,6 +475,64 @@ class RandomFlip:
     def __repr__(self):
         return self.__class__.__name__ + f'(flip_ratio={self.flip_ratio})'
 
+@PIPELINES.register_module()
+class Noise():
+    def __init__(self, ntype='Gauss',prob = 0.1,**kwargs):
+        assert ntype in ['Gauss','Gauss_Blur']
+        self.ntype = ntype
+        self.prob = prob
+        self.kwargs = kwargs
+
+    def __call__(self, results):
+        """Call function to normalize images.
+
+        Args:
+            results (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Normalized results, 'img_norm_cfg' key is added into
+                result dict.
+        """
+        if self.ntype == 'Gauss':
+            assert 'mean' in self.kwargs.keys()
+            assert 'std' in self.kwargs.keys()
+            if random.random() > self.prob:
+                return results
+            for key in results.get('img_fields', ['img']):
+                img = results[key].copy().astype(np.float32)
+                mean = self.kwargs['mean']
+                std = self.kwargs['std']
+
+                minv = np.min(img)
+                img -= minv
+                maxv = np.max(img)
+                img /= maxv
+                noise = np.random.normal(mean,std ,img.shape)
+                img += noise
+                img = np.clip(img,0.0,1.0)
+                img *= maxv
+                img += minv
+                results[key] = img
+        elif self.ntype == 'Gauss_Blur':
+            ksize = (3, 3)
+            sigmaX = 0
+            if 'ksize' in self.kwargs.keys():
+                ksize = self.kwargs['ksize']
+            if 'sigmaX' in self.kwargs.keys():
+                sigmaX = self.kwargs['sigmaX']
+            if random.random() > self.prob:
+                return results
+            for key in results.get('img_fields', ['img']):
+                img = results[key].copy().astype(np.float32)
+                results[key] = cv2.GaussianBlur(src=img, ksize = ksize, sigmaX=sigmaX)
+        results['noise'] = dict(
+            ntype = self.ntype)
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += f'(ntype={self.ntype})'
+        return repr_str
 
 @PIPELINES.register_module()
 class RandomShift:

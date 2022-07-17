@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
-
+import random
 import mmcv
 import numpy as np
 import pycocotools.mask as maskUtils
@@ -37,11 +37,17 @@ class LoadImageFromFile:
     def __init__(self,
                  to_float32=False,
                  color_type='color',
+                 adv_path=None,
+                 adv_prob=0.1,
+                 adv_img=None,
                  file_client_args=dict(backend='disk')):
         self.to_float32 = to_float32
         self.color_type = color_type
         self.file_client_args = file_client_args.copy()
         self.file_client = None
+        self.adv_img = adv_img
+        self.adv_path = adv_path
+        self.adv_prob = adv_prob
 
     def __call__(self, results):
         """Call functions to load image and get image meta information.
@@ -62,6 +68,9 @@ class LoadImageFromFile:
         else:
             filename = results['img_info']['filename']
 
+        if self.adv_path is not None and random.random() < self.adv_prob:
+            filename = osp.join(self.adv_path,results['img_info']['filename'])
+
         img_bytes = self.file_client.get(filename)
         img = mmcv.imfrombytes(img_bytes, flag=self.color_type)
         if self.to_float32:
@@ -73,6 +82,15 @@ class LoadImageFromFile:
         results['img_shape'] = img.shape
         results['ori_shape'] = img.shape
         results['img_fields'] = ['img']
+        if self.adv_img is not None :
+            adv_file = osp.join(self.adv_img, results['img_info']['filename'])
+            adv_img_bytes = self.file_client.get(adv_file)
+            adv_img = mmcv.imfrombytes(adv_img_bytes, flag=self.color_type)
+            if self.to_float32:
+                adv_img = adv_img.astype(np.float32)
+            results['adv'] = adv_img
+            results['adv_filename'] = adv_file
+            results['img_fields'].insert(0,'adv')
         return results
 
     def __repr__(self):
